@@ -96,20 +96,23 @@ h1{
 }
 
 .sidebar-header {
-  background-color: #466425;
+  /* background-color: #466425; */
   padding: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
   height: 60px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  /* border-bottom: 1px solid rgba(255, 255, 255, 0.1); */
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    /* opacity: 29.95; */
+    background: linear-gradient(180deg, #a2c77b 0%, #3b7502 100%);
 }
 
 .logo {
   display: flex;
   align-items: center;
   justify-content: center;
-   margin-left: -96px; 
+   /* margin-left: -96px;  */
 }
 
 .logo-expanded {
@@ -158,13 +161,13 @@ h1{
 }
 
 .nav-link:hover {
-  background-color:#549015;
+   background: linear-gradient(180deg, #87c446 0%, #3b7502 100%);
   color: white;
   transform: translateX(5px);
 }
 
 .nav-menu ul li.active .nav-link {
-  background-color: #549015;
+
   color: white;
   font-weight: 600;
 }
@@ -246,3 +249,12 @@ h1{
   border-right-color: #333;
   z-index: 1000;
 }
+
+  .logo1 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+    margin-left: -96px;  
+}
+
+

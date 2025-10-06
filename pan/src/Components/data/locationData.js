@@ -1,11 +1,11 @@
 export const countries = [  
-  { code: "IN", name: "India" },
+  { code: "India", name: "India" },
 
 ]
 
 export const statesByCountry = {
   
-  IN: [
+  India: [
     "Andhra Pradesh",
     "Arunachal Pradesh",
     "Assam",

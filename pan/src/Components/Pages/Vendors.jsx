@@ -1,7 +1,6 @@
-
-import { useState, useEffect } from "react"
+import * as XLSX from "xlsx";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom"
-import { useRef } from "react"
 import { toast, ToastContainer } from "react-toastify"
 import "react-toastify/dist/ReactToastify.css"
 import { countries, statesByCountry } from "../data/locationData"
@@ -38,7 +37,6 @@ const Vendors = () => {
   const [vendorotp, setVendorotp] = useState(false)
   const [AddModal, setAddModal] = useState(false)
   const [Addform, setAddform] = useState(intialAddressform)
-
   const [addressVendorId, setAddressVendorId] = useState(null)
   const [addressEditingId, setAddressEditingId] = useState(null)
   const [ISUserID, setISUserID] = useState(false)
@@ -50,6 +48,11 @@ const Vendors = () => {
   const [formErrors, setFormErrors] = useState({})
   const [phoneErrors, setPhoneErrors] = useState({})
   const [otpErrors, setOtpErrors] = useState({})
+  const bulktableRef = useRef(null)
+  const [selectedVendors, setSelectedVendors] = useState([]);
+  const [deleteBulkModal,setDeleteBulkModal]=useState(false);
+  const fetchedOnce = useRef(false);
+   const [userId, setUserId] = useState(null);
 
   const handleOtpDigitChange = (e, index) => {
     const value = e.target.value.replace(/\D/g, "")
@@ -72,8 +75,12 @@ const Vendors = () => {
   const navigate = useNavigate()
 
   useEffect(() => {
-    getVendorList()
-  }, [])
+    if (!fetchedOnce.current) {
+      getVendorList();
+      fetchedOnce.current = true; // mark as fetched
+    }
+  }, []);
+
 
   const getVendorList = async () => {
     try {
@@ -84,35 +91,13 @@ const Vendors = () => {
     } catch (err) {
       console.error(err.message)
       setError("Something went wrong while fetching data.")
+      toast.error("Failed to fetch vendor Data")
     } finally {
       setLoading(false)
     }
   }
 
   
-
-
-  const exportToCSV = () => {
-    const headers = ["Store Name", "Address", "Contact Number", "Status"]
-    const rows = vendorData.map((v) => [
-      v.store_name,
-      v.address,
-      v.contact_number,
-      v.is_approved ? "Approved" : "Pending",
-    ])
-
-    const csvContent = [headers.join(","), ...rows.map((row) => row.map((val) => `"${val}"`).join(","))].join("\n")
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.href = url
-    link.setAttribute("download", "vendors_export.csv")
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
-
   const handleNavigate = (id) => {
     console.log(id)
     navigate(`/vendorproduct/${id}`)
@@ -222,7 +207,6 @@ const updateVendor = (updatedVendor) => {
 }
 
 
-
   const handleDelete = async (id) => {
     try {
       await fetch(`https://q8f99wg9-8000.inc1.devtunnels.ms/ecom/vendor/${id}/`, {
@@ -235,20 +219,77 @@ const updateVendor = (updatedVendor) => {
     }
   }
 
-  const handleAddaddress = async (e) => {
-    const { name, value } = e.target
-    setAddform((prev) => ({
-      ...prev,
-      [name]: value,
-    }))
+ 
+const handleResendOtp = async () => {
+  if (!form.verified_phone_number || !/^\d{10}$/.test(form.verified_phone_number)) {
+    toast.error("Invalid phone number. Please try again.");
+    return;
+  }
 
-    if (addressErrors[name]) {
-      setAddressErrors((prev) => ({
-        ...prev,
-        [name]: "",
-      }))
+  try {
+    const response = await fetch("https://q8f99wg9-8000.inc1.devtunnels.ms/user/send-otp/", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ phone_number: `+91${form.verified_phone_number}` }),
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      toast.success("OTP resent successfully");
+      setOtpDigits(["", "", "", ""]); 
+      otpRefs.current[0]?.focus();    
+    } else {
+      toast.error(data.message || "Failed to resend OTP");
+    }
+  } catch (err) {
+    toast.error("Network error while resending OTP");
+    console.error(err);
+  }
+};
+
+  const handleAddaddress = (e) => {
+  const { name, value } = e.target;
+
+  setAddform((prev) => ({
+    ...prev,
+    [name]: value,
+  }));
+
+  // Inline validation for live error clearing
+  let errorMsg = "";
+
+  if (name === "pincode") {
+    if (!/^\d{6}$/.test(value)) {
+      errorMsg = "Pincode must be exactly 6 digits";
     }
   }
+
+  if (name === "country" && !value) {
+    errorMsg = "Please select a country";
+  }
+
+  if (name === "state" && !value) {
+    errorMsg = "Please select a state";
+  }
+
+  if (name === "city" && value.trim().length === 0) {
+    errorMsg = "Please select a city";
+  }
+
+  if (name === "address_line1" && value.trim().length < 5) {
+    errorMsg = "Address line 1 must be at least 5 characters long";
+  }
+
+  setAddressErrors((prev) => ({
+    ...prev,
+    [name]: errorMsg,
+  }));
+};
+
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target
@@ -327,6 +368,8 @@ const updateVendor = (updatedVendor) => {
     } catch (err) {
       console.error("Submit Error:", err)
       toast.error("Failed to save address")
+        handleCloseAdddModal()
+    setAddform(intialAddressform) 
     }
   }
 
@@ -348,9 +391,13 @@ const updateVendor = (updatedVendor) => {
     const method = editingId ? "PUT" : "POST"
     console.log("method", method)
 
+    // if (method === "POST") {
+    //   formData.append("user", userId)
+    // }
     if (method === "POST") {
-      formData.append("user", userId)
-    }
+    const uid = userId || localStorage.getItem("USER_ID"); // get from state or localStorage
+    if (uid) formData.append("user", uid);
+  }
 
     const url = editingId
       ? `https://q8f99wg9-8000.inc1.devtunnels.ms/ecom/vendor/${editingId}/`
@@ -381,7 +428,8 @@ const data = await response.json();
     } catch (err) {
       console.error("Submit Error:", err)
       toast.error("Failed to save vendor")
-      handleCloseModal()
+     handleCloseModal()
+    setForm(initialFormState) 
     }
   }
 
@@ -417,7 +465,8 @@ const data = await response.json();
       if (response.ok) {
         setISUserID(dataverified.is_new_user)
         setVendorverifiedModal(false)
-        setVendorotp(true)
+        setVendorotp(true) 
+         
         toast.success("OTP sent successfully")
       } else {
         toast.error(dataverified.message || "Failed to send OTP. Please try again.")
@@ -425,69 +474,217 @@ const data = await response.json();
     } catch (err) {
       toast.error("Network error while sending OTP. Please check your internet.")
       console.error(err)
+       setForm(initialFormState) 
     }
   }
 
-  const handlevendorotpsubmit = async (e) => {
-    e.preventDefault()
+ 
+const exportToCSV = () => {
+  if (!vendorData || vendorData.length === 0) {
+    toast.error("No vendor data to export");
+    return;
+  }
 
-    if (!validateOTP()) {
-      toast.error("Please enter a valid 4-digit OTP")
-      return
+
+// const handleBulkDelete = async () => {
+//   if (selectedVendors.length === 0) return;
+
+//   try {
+//     // Send DELETE request for each selected vendor
+//     await Promise.all(
+//       selectedVendors.map((id) =>
+//         fetch(`https://q8f99wg9-8000.inc1.devtunnels.ms/ecom/vendor/${id}/`, {
+//           method: "DELETE",
+//         })
+//       )
+//     );
+
+//     // Remove deleted vendors from state
+//     setVendorData((prev) =>
+//       prev.filter((vendor) => !selectedVendors.includes(vendor.id))
+//     );
+
+//     toast.success(`${selectedVendors.length} vendor(s) deleted successfully`);
+//     setSelectedVendors([]);
+//   } catch (err) {
+//     console.error(err);
+//     toast.error("Failed to delete selected vendors");
+//   } finally {
+//     setDeleteBulkModal(false);
+//   }
+// };
+
+
+
+  const exportData = vendorData.map((vendor, index) => ({
+    "S.No": index + 1,
+    "Store Name": vendor.store_name || "NA",
+    "Phone Number": vendor.verified_phone_number || "NA",
+    "Status": vendor.is_approved ? "Approved" : "Pending",
+    "Location": vendor.pickup_locations?.map(
+      (loc) =>
+        `${loc.pincode || ""}, ${loc.country || ""}, ${loc.state || ""}, ${loc.city || ""}, ${loc.address_line1 || ""}, ${loc.address_line2 || ""}`
+    ).join(" | ") || "NA"
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(exportData);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Vendors");
+
+  XLSX.writeFile(wb, "Vendors_List.xlsx");
+};
+
+  // const handlevendorotpsubmit = async (e) => {
+  //   e.preventDefault()
+
+  //   if (!validateOTP()) {
+  //     toast.error("Please enter a valid 4-digit OTP")
+  //     return
+  //   }
+
+  //   const otpValue = otpDigits.join("")
+
+  //   try {
+  //     let response
+  //     const payload = {
+  //       phone_number: `+91${form.verified_phone_number}`,
+  //       otp: otpValue.trim(),
+  //     }
+  //     if (ISUserID) {
+  //       response = await fetch("https://q8f99wg9-8000.inc1.devtunnels.ms/user/register/", {
+  //         method: "POST",
+  //         headers: {
+  //           Accept: "application/json",
+  //           "Content-Type": "application/json",
+  //         },
+  //         body: JSON.stringify(payload),
+  //       })
+  //     } else {
+  //       response = await fetch("https://q8f99wg9-8000.inc1.devtunnels.ms/user/vendorlogin/", {
+  //         method: "POST",
+  //         headers: {
+  //           Accept: "application/json",
+  //           "Content-Type": "application/json",
+  //         },
+  //         body: JSON.stringify(payload),
+  //       })
+  //     }
+
+  //     const data = await response.json()
+  //     console.log("dataaresposne", data)
+
+  //     if (response.ok) {
+  //       localStorage.setItem("USER_ID", data.user_id)
+  //       if (!data.is_new_vendor) {
+  //         toast.error("Vendor is already created with this number")
+  //         setVendorotp(false)
+  //         setOtpDigits(["", "", "", ""])
+  //       } else {
+  //         setVendorotp(false)
+  //         setModalOpen(true)
+  //         setVendorverifiedModal(false)
+  //         setOtpDigits(["", "", "", ""])
+  //         toast.success("OTP verified! Please complete registration")
+  //       }
+  //     } else {
+  //       toast.error(data.message || "Failed to verify OTP.")
+  //     }
+  //   } catch (err) {
+  //     toast.error("Failed to verify OTP")
+  //     console.error(err)
+  //   }
+  // }
+
+const handlevendorotpsubmit = async (e) => {
+  e.preventDefault();
+
+  if (!validateOTP()) {
+    toast.error("Please enter a valid 4-digit OTP");
+    return;
+  }
+
+  const otpValue = otpDigits.join("");
+
+  try {
+    const payload = {
+      phone_number: `+91${form.verified_phone_number}`,
+      otp: otpValue.trim(),
+    };
+
+    let response;
+    if (ISUserID) {
+      // Vendor Registration
+      response = await fetch(
+        "https://q8f99wg9-8000.inc1.devtunnels.ms/user/register/",
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+    } else {
+      // Vendor Login
+      response = await fetch(
+        "https://q8f99wg9-8000.inc1.devtunnels.ms/user/vendorlogin/",
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        }
+      );
     }
 
-    const otpValue = otpDigits.join("")
+    const data = await response.json();
+    console.log("vendor OTP response:", data);
 
-    try {
-      let response
-      const payload = {
-        phone_number: `+91${form.verified_phone_number}`,
-        otp: otpValue.trim(),
-      }
+    if (response.ok) {
       if (ISUserID) {
-        response = await fetch("https://q8f99wg9-8000.inc1.devtunnels.ms/user/register/", {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        })
-      } else {
-        response = await fetch("https://q8f99wg9-8000.inc1.devtunnels.ms/user/vendorlogin/", {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        })
-      }
-
-      const data = await response.json()
-      console.log("dataaresposne", data)
-
-      if (response.ok) {
-        localStorage.setItem("USER_ID", data.user_id)
-        if (!data.is_new_vendor) {
-          toast.error("Vendor is already created with this number")
-          setVendorotp(false)
-          setOtpDigits(["", "", "", ""])
+        // Registration case
+        if (data.is_vendor === true) {
+          toast.info("Vendor already exists with this number");
+          setVendorotp(false);
+          setOtpDigits(["", "", "", ""]);
         } else {
-          setVendorotp(false)
-          setModalOpen(true)
-          setVendorverifiedModal(false)
-          setOtpDigits(["", "", "", ""])
-          toast.success("OTP verified! Please complete registration")
+          toast.success("OTP verified! Please complete vendor registration");
+          setUserId(data.user_id); // Save in state for later registration
+          setModalOpen(true);
+          setVendorotp(false);
+          setVendorverifiedModal(false);
+          setOtpDigits(["", "", "", ""]);
         }
       } else {
-        toast.error(data.message || "Failed to verify OTP.")
+        // Login case
+        if (data.is_new_vendor === false) {
+          toast.info("Vendor already exists, logged in successfully");
+          localStorage.setItem("USER_ID", data.user_id); // Save in localStorage
+          setVendorotp(false);
+          setOtpDigits(["", "", "", ""]);
+        } else {
+          toast.success("Vendor login successfully, please complete registration");
+          localStorage.setItem("USER_ID", data.user_id); // Save in localStorage
+          setModalOpen(true);
+          setVendorotp(false);
+          setVendorverifiedModal(false);
+          setOtpDigits(["", "", "", ""]);
+        }
       }
-    } catch (err) {
-      toast.error("Failed to verify OTP")
-      console.error(err)
+    } else {
+      toast.error(data.message || "Invalid or expired OTP");
     }
+  } catch (err) {
+    toast.error("Failed to verify OTP. Please try again");
+    console.error("Vendor OTP verification failed", err);
   }
+};
+
+
+
 
   const handleCloseModal = () => {
     setModalOpen(false)
@@ -496,16 +693,32 @@ const data = await response.json();
     setFormErrors({})
   }
 
+
+const handleCheckboxChange = (vendorId) => {
+  setSelectedVendors(prev =>
+    prev.includes(vendorId)
+      ? prev.filter(id => id !== vendorId)
+      : [...prev, vendorId]                 
+  );
+};
+
+
   const filteredVendors = vendorData.filter((vendor) => {
     const matchesSearch =
       vendor?.store_name === null || vendor?.store_name?.toLowerCase().includes(searchTerm?.toLowerCase())
-
-
-
     return matchesSearch
    
   })
+
+  .sort((a, b) => {
+    if (!a.store_name) return 1;  
+    if (!b.store_name) return -1;
+    return a.store_name.localeCompare(b.store_name);
+  })
   const availableStates = statesByCountry[Addform.country] || []
+
+
+
 
   return (
     <>
@@ -527,9 +740,18 @@ const data = await response.json();
             <button className="add-vendor-btn" onClick={() => setVendorverifiedModal(true)}>
               + Add Vendor
             </button>
-            <button className="export-btn" onClick={exportToCSV}>
-              Export Vendors
-            </button>
+           <button className="export-btn" onClick={exportToCSV}>
+  Export Details
+</button>
+{/* {selectedVendors.length > 0 && (
+  <button
+    className="add-vendor-btn"
+    onClick={() => setDeleteConfirmModal(true)}
+  >
+    Delete Selected 
+  </button>
+)} */}
+
           </div>
         </div>
         <div className="vendors-stats">
@@ -546,13 +768,13 @@ const data = await response.json();
             <div className="stat-value">{vendorData.filter((v) => v.is_approved === false).length}</div>
           </div>
         </div>
-        <table className="vendors-table">
+        <div classsName="table-container">
+        <table className="customers-table" ref={bulktableRef}>
           <thead>
             <tr>
               <th>Id</th>
               <th>Profile</th>
               <th>Store Name</th>
-              {/* <th>Vendor Name </th> */}
               <th>Location</th>
               <th>Phone Number</th>
               <th>Action</th>
@@ -565,8 +787,13 @@ const data = await response.json();
             <p style={{ color: "red" }}>{error}</p>
           ) : (
             <tbody>
-              {filteredVendors.sort((a,b)=>a.id-b.id).map((vendor,index) => (
+              {filteredVendors.map((vendor,index) => (
                 <tr key={vendor.id}>
+                  {/* <input
+        type="checkbox"
+        checked={selectedVendors.includes(vendor.id)}
+        onChange={() => handleCheckboxChange(vendor.id)}
+      /> */}
                   <td className="id1">{index+1}</td>
                   <td>
                     {vendor.profile_picture ? (
@@ -590,10 +817,11 @@ const data = await response.json();
                   <td>{vendor.verified_phone_number}</td>
                   <td>
                     <div className="action-buttons">
-                      <button className="action-btn view" title="View" onClick={() => handleNavigate(vendor.id)}>
+                      <button className="action-btn view" title="View vendor product" onClick={() => handleNavigate(vendor.id)}>
                         👁
                       </button>
                       <button
+                      title="Edit Vendor Details"
                         className="action-btn edit"
                         onClick={() => {
                          
@@ -616,7 +844,7 @@ setForm({
                       </button>
                       <button
                         className="action-btn delete"
-                        title="Delete"
+                        title="Delete vendor"
                         onClick={() => {
                           setSelectedVendorId(vendor.id)
                           setDeleteConfirmModal(true)
@@ -639,6 +867,7 @@ setForm({
                         </button>
                       )}
                       <button
+                      title="edit Address Details"
                         className="action-btn edit"
                         onClick={() => {
                           const addr = vendor.pickup_locations?.[0]
@@ -657,6 +886,7 @@ setForm({
                           } else {
                             setAddressEditingId(null)
                             setAddform(intialAddressform)
+                            setAddressErrors({})
                           }
                         }}
                       >
@@ -679,6 +909,7 @@ setForm({
             </tbody>
           )}
         </table>
+        </div>
 
         {modalOpen && (
           <div className="modal">
@@ -778,15 +1009,17 @@ setForm({
                
               />
               {phoneErrors.verified_phone_number && (
-                <span style={{ color: "red", fontSize: "12px" }}>{phoneErrors.verified_phone_number}</span>
+                <span style={{ color: "red", fontSize: "17px" }}>{phoneErrors.verified_phone_number}</span>
               )}
               <div className="form-buttons">
                 <button type="submit">Save</button>
-                <button
+                <button 
+               
                   type="button"
                   onClick={() => {
                     setVendorverifiedModal(false)
                     setPhoneErrors({})
+                    setForm(initialFormState)
                   }}
                 >
                   Cancel
@@ -820,22 +1053,32 @@ setForm({
                 </div>
                 {otpErrors.otp && (
                   <span
-                    style={{ color: "red", fontSize: "12px", textAlign: "center", display: "block", marginTop: "5px" }}
+                    style={{ color: "red", fontSize: "17px", textAlign: "center", display: "block", marginTop: "-12px",marginBottom:"7px" }}
                   >
                     {otpErrors.otp}
                   </span>
                 )}
 
                 <div className="otp-button-group">
+                  <button
+            type="button"
+           className="otp-btn resend-btn"
+
+            onClick={handleResendOtp}
+          >
+            Resend otp
+          </button>
                   <button type="submit" className="otp-btn verify-btn">
                     Verify
                   </button>
                   <button
                     type="button"
+                    className="otp-btn resend-btn"
                     onClick={() => {
                       setVendorotp(false)
                       setOtpDigits(["", "", "", ""])
                       setOtpErrors({})
+                      setForm(initialFormState)
                     }}
                   >
                     Cancel
@@ -954,6 +1197,22 @@ setForm({
     </form>
   </div>
 )}
+{/* {deleteBulkModal && (
+  <div className="modal">
+    <div className="modal-content">
+      <h3>Are you sure you want to delete {selectedVendors.length} selected vendors?</h3>
+      <div className="form-buttons">
+        <button
+          className="otp-btn verify-btn"
+          onClick={handleBulkDelete}
+        >
+          Yes
+        </button>
+        <button onClick={() => setDeleteBulkModal(false)}>No</button>
+      </div>
+    </div>
+  </div>
+)} */}
 
 
 

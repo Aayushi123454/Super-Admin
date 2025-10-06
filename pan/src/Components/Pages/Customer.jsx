@@ -1,7 +1,6 @@
-
-import { useState, useEffect } from "react"
+import * as XLSX from "xlsx";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom"
-import { useRef } from "react"
 import { ToastContainer, toast } from "react-toastify"
 import "react-toastify/dist/ReactToastify.css"
 
@@ -10,7 +9,7 @@ const userId = localStorage.getItem("USER_ID")
 console.log("USER_ID", userId)
 
 const initialCustomerFormState = {
-  user: userId,
+  // user: userId,
   first_name: "",
   email: "",
   verified_phone_number: "",
@@ -23,19 +22,7 @@ const initialFormErrors = {
   otp: "",
 }
 
-const exportToCSV = (customers, filename = "customers.csv") => {
-  const headers = ["Name", "Phone Number", "Email"]
-  const rows = customers.map((c) => [c.first_name, `'${c.verified_phone_number}'`, c.email].join(","))
-  const csvContent = [headers.join(","), ...rows].join("\n")
 
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-  const link = document.createElement("a")
-  link.href = URL.createObjectURL(blob)
-  link.setAttribute("download", filename)
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-}
 
 const Customers = () => {
   const [searchcustomerTerm, setSearchcustomerTerm] = useState("")
@@ -59,6 +46,11 @@ const Customers = () => {
   const [otpFormErrors, setOtpFormErrors] = useState({ otp: "" })
   const [deleteConfirmModal, setDeleteConfirmModal] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+  const bulktableRef = useRef(null);
+  const fetchedOnce = useRef(false);
+  const [userId, setUserId] = useState(null);
+    
+
 
 
 
@@ -77,13 +69,8 @@ const Customers = () => {
       errors.email = "Please enter a valid email address";
     }
 
-    // if (!editingCustomerId && !CustomerForm.verified_phone_number.trim()) {
-    //   errors.verified_phone_number = "Phone number is required";
-    // } else if (CustomerForm.verified_phone_number && !/^\d{10}$/.test(CustomerForm.verified_phone_number)) {
-    //   errors.verified_phone_number = "Phone number must be 10 digits";
-    // }
 
-    console.log("Validation Errors:", errors); // Debugging line
+    console.log("Validation Errors:", errors);
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -116,13 +103,29 @@ const Customers = () => {
   }
 
 
-  
+
   const handleCloseCustomerModal = () => {
     setCustomerModalOpen(false)
     setEditingCustomerId(null)
     setCustomerForm(initialCustomerFormState)
     setFormErrors(initialFormErrors)
   }
+  const handleDownload = () => {
+
+    const exportData = customerData.map((c) => ({
+      Name: c.first_name,
+      Email: c.email,
+      "Phone Number": c.verified_phone_number,
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Customers");
+
+    XLSX.writeFile(wb, "Customers.xlsx");
+  };
+
+
 
   const handleNavigate = (id) => {
     navigate(`/Orderlist/${id}`)
@@ -172,7 +175,7 @@ const Customers = () => {
     console.log("mobilenumber", `+91${CustomerForm.verified_phone_number}`)
 
     try {
-      const response = await fetch("http://128.199.18.191/user/send-otp/", {
+      const response = await fetch("https://q8f99wg9-8000.inc1.devtunnels.ms/user/send-otp/", {
         method: "POST",
         headers: {
           Accept: "application/json",
@@ -191,15 +194,27 @@ const Customers = () => {
 
         const Is_user = data.is_new_user
         setISUserID(Is_user)
+        //         toast.success("OTP sent successfully", {
+        //   position: "top-center",
+        //   autoClose: 2000,
+        //   onClose: () => {
+        //     setCustomerOtpModal(true)
+        //   },
+        // })
+        setCustomerOtpModal(true);
+
 
         toast.success("OTP sent successfully", {
           position: "top-center",
           autoClose: 2000,
-          onClose: () => {
-            setCustomerOtpModal(true)
-          },
-        })
-      } else {
+        });
+
+ console.log("sentotp", response)
+
+      }
+     
+      
+      else {
         toast.error(" Invalid phone number", {
           position: "top-center",
           autoClose: 2000,
@@ -212,12 +227,13 @@ const Customers = () => {
       })
     }
   }
+ 
 
   const handleCustomerDelete = async (id) => {
     console.log("idddddd", id)
 
     try {
-      const response = await fetch(`http://128.199.18.191/ecom/customer/${id}/`, {
+      const response = await fetch(`https://q8f99wg9-8000.inc1.devtunnels.ms/ecom/customer/${id}/`, {
         method: "DELETE",
       })
 
@@ -243,6 +259,13 @@ const Customers = () => {
     }
   }
 
+  const newThisYearCount = customerData.filter((customer) => {
+    if (!customer.created_at) return false
+    const createdDate = new Date(customer.created_at)
+    const now = new Date()
+    return createdDate.getFullYear() === now.getFullYear()
+  }).length
+
   const handleCustomerFormSubmit = async (e) => {
     console.log("aaaa", CustomerForm.verified_phone_number)
     e.preventDefault()
@@ -256,13 +279,17 @@ const Customers = () => {
 
     const method = editingCustomerId ? "PUT" : "POST"
     const url = editingCustomerId
-      ? `http://128.199.18.191/ecom/customer/${editingCustomerId}/`
-      : "http://128.199.18.191/ecom/customer/"
+      ? `https://q8f99wg9-8000.inc1.devtunnels.ms/ecom/customer/${editingCustomerId}/`
+      : "https://q8f99wg9-8000.inc1.devtunnels.ms/ecom/customer/"
+
+    console.log("method", method, url, userId)
 
     const formData = new FormData()
-    if (method === "POST") {
-      formData.append("user", userId)
-    }
+   if (method === "POST") {
+   
+    const uid = userId || localStorage.getItem("USER_ID");
+    if (uid) formData.append("user", uid);
+  }
 
     Object.entries(CustomerForm).forEach(([key, value]) => {
       formData.append(key, value)
@@ -311,86 +338,224 @@ const Customers = () => {
       })
     }
   }
-
-  const handleOtpSubmit = async (e) => {
-    e.preventDefault()
-
-    if (!validateOtpForm()) {
-      return
+  const resendOtp = async () => {
+    if (!validatePhoneForm()) {
+      return;
     }
 
     try {
-      let response
+      const response = await fetch("https://q8f99wg9-8000.inc1.devtunnels.ms/user/send-otp/", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          phone_number: `+91${CustomerForm.verified_phone_number}`,
+        }),
+      });
 
-      const OTPValue = getOtpValue()
-      console.log("Final OTP", OTPValue)
-
-      const payload = {
-        phone_number: `+91${CustomerForm.verified_phone_number}`,
-        otp: OTPValue,
+      const data = await response.json();
+      if (response.ok) {
+        toast.success("OTP resent successfully", {
+          position: "top-center",
+          autoClose: 2000,
+        });
+      } else {
+        toast.error("Failed to resend OTP", {
+          position: "top-center",
+          autoClose: 2000,
+        });
       }
+    } catch (err) {
+      toast.error("Error resending OTP", {
+        position: "top-center",
+      });
+    }
+  };
 
-      console.log("paloadd", payload);
+
+  // const handleOtpSubmit = async (e) => {
+  //   e.preventDefault()
+
+  //   if (!validateOtpForm()) {
+  //     return
+  //   }
+
+  //   try {
+  //     let response
+
+  //     const OTPValue = getOtpValue()
+  //     console.log("Final OTP", OTPValue)
+
+  //     const payload = {
+  //       phone_number: `+91${CustomerForm.verified_phone_number}`,
+  //       otp: OTPValue,
+  //     }
+
+  //     console.log("paloadd", payload);
+
+  //     if (ISUserID) {
+  //       response = await fetch("https://q8f99wg9-8000.inc1.devtunnels.ms/user/register/", {
+  //         method: "POST",
+  //         headers: {
+  //           Accept: "application/json",
+  //           "Content-Type": "application/json",
+  //         },
+  //         body: JSON.stringify(payload),
+  //       })
+  //     } else {
+  //       response = await fetch("https://q8f99wg9-8000.inc1.devtunnels.ms/user/customerlogin/", {
+  //         method: "POST",
+  //         headers: {
+  //           Accept: "application/json",
+  //           "Content-Type": "application/json",
+  //         },
+  //         body: JSON.stringify(payload),
+  //       })
+  //     }
+
+  //     const data = await response.json()
+  //     console.log("serverreposne1111", response)
+  //     console.log("dataaresposne", data)
+
+  //     if (ISUserID) {
+  //       localStorage.setItem("USER_ID", data.user_id)
+  //     }
+
+  //     if (response.ok) {
+
+
+
+  //       if (data.is_new_customer===true|| data?.is_customer===true) {
+  //         toast.info(" Customer already exists with this number", {
+  //           position: "top-center",
+  //           autoClose: 3000,
+  //         })
+  //         setCustomerOtpModal(false)
+  //         setCustomerForm(initialCustomerFormState)
+  //         setOtpDigits(["", "", "", ""])
+  //       } else {
+  //         toast.success(" OTP verified! Please complete registration", {
+  //           position: "top-center",
+  //           autoClose: 2000,
+  //         })
+  //         setOtpVerified(false)
+  //         setCustomerModalOpen(true)
+  //         setCustomerOtpModal(false)
+  //         setOtpDigits(["", "", "", ""])
+  //       }
+  //     } else {
+  //       toast.error(" Invalid or expired OTP!", {
+  //         position: "top-center",
+  //         autoClose: 3000,
+  //       })
+  //     }
+  //   } catch (err) {
+  //     console.error("OTP verification failed", err)
+  //     toast.error(" Failed to verify OTP. Please try again", {
+  //       position: "top-center",
+  //       autoClose: 2000,
+  //     })
+  //   }
+  // }
+
+
+
+  const handleOtpSubmit = async (e) => {
+  e.preventDefault();
+
+  if (!validateOtpForm()) return;
+
+  try {
+    const OTPValue = getOtpValue();
+    console.log("Final OTP", OTPValue);
+
+    const payload = {
+      phone_number: `+91${CustomerForm.verified_phone_number}`,
+      otp: OTPValue,
+    };
+
+    let response;
+    if (ISUserID) {
+   
+      response = await fetch("https://q8f99wg9-8000.inc1.devtunnels.ms/user/register/", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+    } else {
+     
+      response = await fetch("https://q8f99wg9-8000.inc1.devtunnels.ms/user/customerlogin/", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+    }
+
+    const data = await response.json();
+    console.log("server response", response);
+    console.log("data response", data);
+
+    if (response.ok) {
+      // if (ISUserID) {
+      //   localStorage.setItem("USER_ID", data.user_id);
+      // }
 
       if (ISUserID) {
-        response = await fetch("http://128.199.18.191/user/register/", {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        })
-      } else {
-        response = await fetch("http://128.199.18.191/user/customerlogin/", {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        })
-      }
-
-      const data = await response.json()
-      console.log("serverreposne1111", response)
-      console.log("dataaresposne", data)
-
-      if (response.ok) {
-        localStorage.setItem("USER_ID", data.user_id)
-
-        if (!data.is_new_customer) {
-          toast.info(" Customer already exists with this number", {
-            position: "top-center",
-            autoClose: 3000,
-          })
-          setCustomerOtpModal(false)
+    
+        if (data.is_customer === true) {
+          toast.info("Customer already exists with this number");
+            setCustomerOtpModal(false)
           setCustomerForm(initialCustomerFormState)
           setOtpDigits(["", "", "", ""])
+          
         } else {
-          toast.success(" OTP verified! Please complete registration", {
-            position: "top-center",
-            autoClose: 2000,
-          })
-          setOtpVerified(false)
+          toast.success("OTP verified! Please complete registration");
+            setUserId(data.user_id);
+             setOtpVerified(false)
           setCustomerModalOpen(true)
           setCustomerOtpModal(false)
           setOtpDigits(["", "", "", ""])
         }
       } else {
-        toast.error(" Invalid or expired OTP!", {
-          position: "top-center",
-          autoClose: 3000,
-        })
+     
+        if (data.is_new_customer === false) {
+          toast.info("Customer already exists, logged in successfully");
+         setCustomerOtpModal(false)
+          setCustomerForm(initialCustomerFormState)
+          setOtpDigits(["", "", "", ""])
+        } else {
+          toast.success("Customer login successfully");
+          localStorage.setItem("USER_ID", data.user_id);
+           setOtpVerified(false)
+          setCustomerModalOpen(true)
+          setCustomerOtpModal(false)
+          setOtpDigits(["", "", "", ""])
+        }
       }
-    } catch (err) {
-      console.error("OTP verification failed", err)
-      toast.error(" Failed to verify OTP. Please try again", {
-        position: "top-center",
-        autoClose: 2000,
-      })
+    } else {
+      toast.error(data.message || "Invalid or expired OTP");
     }
+  } catch (err) {
+    console.error("OTP verification failed", err);
+    toast.error("Failed to verify OTP. Please try again");
   }
+};
+
+
+// const resetCustomerOtpFlow = () => {
+//   setCustomerOtpModal(false);
+//   setCustomerForm(initialCustomerFormState);
+//   setOtpDigits(["", "", "", ""]);
+// };
+
 
   const handleCustomerInputChange = (e) => {
 
@@ -400,10 +565,10 @@ const Customers = () => {
     let updatedValue = value;
 
     if (name === "verified_phone_number") {
-     
+
       const digitsOnly = value.replace(/\D/g, "");
 
-      updatedValue =  digitsOnly;
+      updatedValue = digitsOnly;
     }
 
     setCustomerForm((prev) => ({
@@ -431,10 +596,10 @@ const Customers = () => {
     }
   }
 
-  
+
   const getCustomerList = async () => {
     try {
-      const response = await fetch("http://128.199.18.191/ecom/customer/", {
+      const response = await fetch("https://q8f99wg9-8000.inc1.devtunnels.ms/ecom/customer/", {
         method: "GET",
         headers: {
           Accept: "application/json",
@@ -443,7 +608,7 @@ const Customers = () => {
       })
       const data = await response.json()
       const sortedData = data.data
-    
+
 
       setCustomerData(sortedData)
 
@@ -451,22 +616,21 @@ const Customers = () => {
     } catch (err) {
       console.error(err.message)
       setCustomerError("Something went wrong while fetching data.")
-      toast.error(" Failed to fetch customer data", {
-        position: "top-center",
-        autoClose: 2000,
-      })
+      // toast.error(" Failed to fetch customer data", {
+      //   position: "top-center",
+      //   autoClose: 2000,
+      // })
     } finally {
       setCustomerLoading(false)
     }
   }
 
-
-
-
   useEffect(() => {
-    getCustomerList()
-  }, [])
-
+    if (!fetchedOnce.current) {
+      getCustomerList();
+      fetchedOnce.current = true; // mark as fetched
+    }
+  }, []);
 
 
   // const filteredCustomers = customerData?.filter(
@@ -477,15 +641,15 @@ const Customers = () => {
 
   // console.log('customerData-',customerData)
   const filteredCustomers = [...customerData] // copy first
-  .filter((customer) =>
-    !customer?.first_name ||
-    customer?.first_name?.toLowerCase().includes(searchcustomerTerm.toLowerCase())
-  )
-  .sort((a, b) => {
-    if (!a.first_name) return 1; 
-    if (!b.first_name) return -1;
-    return a.first_name.localeCompare(b.first_name);
-  });
+    .filter((customer) =>
+      !customer?.first_name ||
+      customer?.first_name?.toLowerCase().includes(searchcustomerTerm.toLowerCase())
+    )
+    .sort((a, b) => {
+      if (!a.first_name) return 1;
+      if (!b.first_name) return -1;
+      return a.first_name.localeCompare(b.first_name);
+    });
 
 
 
@@ -517,11 +681,25 @@ const Customers = () => {
         <div className="filter-controls">
 
 
-          <button className="add-customer-btn" onClick={() => setOtpVerified(true)}>
+          {/* <button className="add-customer-btn" onClick={() => setOtpVerified(true)}>
+            + Add Customer
+          </button> */}
+
+          {/* <button className="export-btn" onClick={() => exportToCSV(filteredCustomers)}>
+            Export Details
+          </button> */}
+
+          <button
+            className="add-customer-btn"
+            onClick={() => {
+              setOtpVerified(true);
+              setCustomerForm(initialCustomerFormState);
+            }}
+          >
             + Add Customer
           </button>
 
-          <button className="export-btn" onClick={() => exportToCSV(filteredCustomers)}>
+          <button className="export-btn" onClick={handleDownload}>
             Export Details
           </button>
         </div>
@@ -529,92 +707,100 @@ const Customers = () => {
 
       <div className="customers-stats">
         <div className="stat-card">
+
           <h3>Total Customers</h3>
           <div className="stat-value">{customerData.length}</div>
         </div>
-        {/* d <iv className="stat-card">
-          <h3>Active Customers</h3>
-          <div className="stat-value">{customerData.filter((c) => c.status === "active").length}</div>
-        </div> */}
+
         <div className="stat-card">
+
+          <h3>New This Year</h3>
+          <div className="stat-value">{newThisYearCount}</div>
+        </div>
+
+
+
+        <div className="stat-card">
+
           <h3>New This Month</h3>
           <div className="stat-value">{newThisMonthCount}</div>
         </div>
       </div>
-
-      <table className="customers-table">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Email</th>
-            <th>Phone Number</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {Loading ? (
+      <div className="table-container">
+        <table className="customers-table" ref={bulktableRef}>
+          <thead>
             <tr>
-              <td colSpan="6">Loading customer data...</td>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Phone Number</th>
+              <th>Action</th>
             </tr>
-          ) : error ? (
-            <tr>
-              <td colSpan="6" style={{ color: "red" }}>
-                {error}
-              </td>
-            </tr>
-          ) : filteredCustomers.length > 0 ? (
-            filteredCustomers.map((customer) => 
-              (           
-                <tr key={customer.id}>
-                <td>{customer.first_name} </td>
-                <td>{customer.email}</td>
-                <td>{customer.verified_phone_number}</td>
-                <td>
-                  <div className="action-buttons">
-                    <button className="action-btn view" title="View" onClick={() => handleNavigate(customer.id)}>
-                      👁
-                    </button>
-                    <button
-                      className="action-btn edit"
-                      title="Edit"
-                      onClick={() => {
-                        setCustomerModalOpen(true)
-                        setEditingCustomerId(customer.id)
-                        setCustomerForm({
-                          id: customer.id,
-                          first_name: customer.first_name,
-                          email: customer.email,
-                          verified_phone_number: customer?.verified_phone_number,
-                        })
-                      }}
-                    >
-                      ✏️
-                    </button>
-                    <button
-                      className="action-btn delete"
-                      title="Delete"
-                      onClick={() => {
-                        setSelectedCustomerId(customer.id);
-                        setDeleteConfirmModal(true);
-                      }}
-                    >
-                      🗑
-                    </button>
-
-                  </div>
+          </thead>
+          <tbody>
+            {Loading ? (
+              <tr>
+                <td colSpan="6">Loading customer data...</td>
+              </tr>
+            ) : error ? (
+              <tr>
+                <td colSpan="6" style={{ color: "red" }}>
+                  {error}
                 </td>
               </tr>
-            )
-          )
-          ) : (
-            <tr>
-              <td colSpan="6" style={{ textAlign: "center" }}>
-                No Data Found
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+            ) : filteredCustomers.length > 0 ? (
+              filteredCustomers.map((customer) =>
+              (
+                <tr key={customer.id}>
+                  <td>{customer.first_name} </td>
+                  <td>{customer.email}</td>
+                  <td>{customer.verified_phone_number}</td>
+                  <td>
+                    <div className="action-buttons">
+                      <button className="action-btn view" title=" View Customer Order " onClick={() => handleNavigate(customer.id)}>
+                        👁
+                      </button>
+                      <button
+                        className="action-btn edit"
+                        title="Edit Customer Details"
+                        onClick={() => {
+                          setCustomerModalOpen(true)
+                          setEditingCustomerId(customer.id)
+                          setCustomerForm({
+                            id: customer.id,
+                            first_name: customer.first_name,
+                            email: customer.email,
+                            verified_phone_number: customer?.verified_phone_number,
+                          })
+                        }}
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        className="action-btn delete"
+                        title="Delete Customer"
+                        onClick={() => {
+                          setSelectedCustomerId(customer.id);
+                          setDeleteConfirmModal(true);
+                        }}
+                      >
+                        🗑
+                      </button>
+
+                    </div>
+                  </td>
+                </tr>
+              )
+              )
+            ) : (
+              <tr>
+                <td colSpan="6" style={{ textAlign: "center" }}>
+                  No Data Found
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
 
       {customermodalOpen && (
         <div className="modal">
@@ -633,7 +819,7 @@ const Customers = () => {
 
             />
             {formErrors.first_name && (
-              <div style={{ color: "red", fontSize: "12px", marginTop: "4px" }}>{formErrors.first_name}</div>
+              <div style={{ color: "red", fontSize: "17px", marginTop: "4px" }}>{formErrors.first_name}</div>
             )}
 
             <label htmlFor="email">Email:</label>
@@ -645,7 +831,7 @@ const Customers = () => {
               onChange={handleCustomerInputChange}
             />
             {formErrors.email && (
-              <div style={{ color: "red", fontSize: "12px", marginTop: "4px" }}>{formErrors.email}</div>
+              <div style={{ color: "red", fontSize: "17px", marginTop: "4px" }}>{formErrors.email}</div>
             )}
 
             <label htmlFor="phone_number">Mobile Number:</label>
@@ -660,7 +846,7 @@ const Customers = () => {
               required
             />
 
-            
+
             <div className="form-buttons">
               <button type="submit">Save</button>
               <button type="button" onClick={handleCloseCustomerModal}>
@@ -686,7 +872,7 @@ const Customers = () => {
               inputMode="numeric"
             />
             {phoneFormErrors.verified_phone_number && (
-              <div style={{ color: "red", fontSize: "12px", marginTop: "4px" }}>
+              <div style={{ color: "red", fontSize: "17px", marginTop: "4px" }}>
                 {phoneFormErrors.verified_phone_number}
               </div>
             )}
@@ -756,16 +942,18 @@ const Customers = () => {
                 ))}
               </div>
               {otpFormErrors.otp && (
-                <div style={{ color: "red", fontSize: "12px", marginTop: "4px", textAlign: "center" }}>
+                <div style={{ color: "red", fontSize: "17px", marginTop: "-13px", textAlign: "center", marginBottom: "7px" }}>
                   {otpFormErrors.otp}
                 </div>
               )}
 
               <div className="otp-button-group">
+                <button type="button" className="otp-btn resend-btn" onClick={resendOtp}>Resend OTP</button>
                 <button type="submit" className="otp-btn verify-btn">
                   Verify
                 </button>
                 <button
+                  className="otp-btn resend-btn"
                   type="button"
                   onClick={() => {
                     setCustomerOtpModal(false)
@@ -784,6 +972,8 @@ const Customers = () => {
       <ToastContainer position="top-center" autoClose={1000} />
     </>
   )
+
+
 }
 
 export default Customers

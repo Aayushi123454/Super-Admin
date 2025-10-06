@@ -15,6 +15,12 @@ import Doctor from './Components/Pages/Doctor';
 import Vendorproduct from './Components/Pages/Vendorproduct';
 import Orderlist from './Components/Pages/Orderlist';
 import Patient from './Components/Pages/Patient';
+import Center from './Components/Pages/Center';
+import DoctorDetail from './Components/Pages/DoctorDetail';
+import Booking from './Components/Pages/Booking';
+import Allpatient from './Components/Pages/Allpatient';
+import Items from './Components/Pages/Items';
+import Support from './Components/Pages/Support';
 
 
 const Layout = ({ children }) => {
@@ -89,6 +95,8 @@ function App() {
             </Layout>
           }
         />
+
+        
         <Route
           path="/history"
           element={
@@ -97,6 +105,46 @@ function App() {
             </Layout>
           }
         />
+
+ 
+        <Route
+          path="/Allpatient"
+          element={
+            <Layout>
+              <Allpatient/>
+            </Layout>
+          }
+        />
+
+
+  <Route
+          path="/Center"
+          element={
+            <Layout>
+              <Center />
+            </Layout>
+          }
+        />
+
+ <Route
+          path="/Booking"
+          element={
+            <Layout>
+              <Booking />
+            </Layout>
+          }
+        />
+
+<Route
+          path="/Support"
+          element={
+            <Layout>
+              <Support />
+            </Layout>
+          }
+        />
+
+        
          <Route
           path="/Vendorproduct/:vendorId"
           element={
@@ -122,6 +170,24 @@ function App() {
             </Layout>
           }
         />
+        <Route
+          path="/DoctorDetail/:DoctorId"
+          element={
+            <Layout>
+              <DoctorDetail />
+            </Layout>
+          }
+        />
+            <Route
+          path="/Items/:PaymentId"
+          element={
+            <Layout>
+              <Items />
+            </Layout>
+          }
+        />
+        
+
 
          
         

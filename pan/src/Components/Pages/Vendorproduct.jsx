@@ -238,9 +238,6 @@ const Vendorproduct = () => {
 
     }
 
-
-
-
     else {
 
       setformData({
@@ -252,8 +249,6 @@ const Vendorproduct = () => {
 
 
   };
-
-
 
 
   const handlevariantsubmit = async (e) => {
@@ -414,12 +409,15 @@ const Vendorproduct = () => {
         body: JSON.stringify(payload),
       });
 
+    
       console.log("responsevendor", response);
 
 
       if (!response.ok) {
         const errorData = await response.json();
-        alert(errorData.message || "Something went wrong");
+        toast.error(errorData.error);
+         toast.error(errorData.non_field_errors[0])
+         
         return;
       }
 
@@ -706,16 +704,12 @@ const Vendorproduct = () => {
                   <td>{product.brand}</td>
                   <td>{product.category.name}</td>
                   <td>{product.form} </td>
-                  <td>{product.is_active ? "In  of  Stock" : "Out of stock"}</td>
+                  <td>{product.is_active ? "In Stock" : "Out of stock"}</td>
                   <td>{product.stock}</td>
                   <td>{product.selling_price}</td>
                   <td>{product.discount_percentage}%</td>
-
-npm 
-
-                  <td>
+  <td>
                     <div className='action-buttons'>
-
                       <button
                         className='action-btn edit'
                         tittle="Edit Product Details"
@@ -964,7 +958,7 @@ npm
                 <p style={{ color: "red", fontSize: "13px", margin: "4px 0 0" }}>
                   {categoryErrors.name}
                 </p>
-              )}
+              )} 
             </div>
 
 
@@ -975,11 +969,11 @@ npm
                 onChange={(e) => setCategoryImage(e.target.files[0])}
                 name='image'
               />
-              {categoryErrors.image && (
+               {categoryErrors.image && (
                 <p style={{ color: "red", fontSize: "13px", margin: "4px 0 0" }}>
                   {categoryErrors.image}
                 </p>
-              )}
+              )} 
             </div>
 
             <div className='form-buttons'>

@@ -105,7 +105,7 @@ const showOrders = SearchOrderlistTerm.trim()
         <div className="search-bar">
           <input
             type="text"
-            placeholder="Search customer order......"
+            placeholder="Search customer order ny product name......"
             value={SearchOrderlistTerm}
             onChange={(e) => setSearchOrderlistTerm(e.target.value)}
             className="search-input"
@@ -198,7 +198,7 @@ const showOrders = SearchOrderlistTerm.trim()
                 <td>{order.order_status}</td>
                 <td>
                   <div className="action-buttons">
-                    <button title="cancel order" onClick={() => handlecancelorder(order.id)}
+                    <button title="btn-cancel" onClick={() => handlecancelorder(order.id)}
                     >
                       Cancel
                     </button>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React,  { useState, useEffect, useRef }  from "react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -27,7 +27,9 @@ const Product = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteProductId, setDeleteProductId] = useState(null);
   const [validationErrors, setValidationErrors] = useState({});
-
+  const[Currentpage,setCurrentpage]=useState(1);
+  const[Productperpage,setProductperpage]=useState(5);
+ const fetchedOnce = useRef(false);
 
   const fetchProducts = async () => {
     try {
@@ -42,6 +44,10 @@ const Product = () => {
       }
     } catch {
       setError("Something went wrong while fetching data.");
+        toast.error(" Failed to fetch Product list", {
+        position: "top-center",
+        autoClose: 2000,
+      })
     } finally {
       setLoadingProduct(false);
     }
@@ -58,10 +64,15 @@ const Product = () => {
     }
   };
 
+  
   useEffect(() => {
-    fetchProducts();
+    if (!fetchedOnce.current) {
+     fetchProducts();
     fetchCategoryOptions();
+      fetchedOnce.current = true; 
+    }
   }, []);
+
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -97,6 +108,7 @@ const Product = () => {
       setDeleteProductId(null);
     }
   };
+  
 
 const validateForm = () => {
   let errors = {};
@@ -198,10 +210,14 @@ const validateForm = () => {
       return matchesSearch && matchesStock;
     });
   };
+  // const indexoflastorder = Currentpage*Productperpage;
+  // const indexoffirstorder=indexoflastorder - Productperpage;
+  // const Currentproduct =  filteredProducts.slice(indexoffirstorder,indexoflastorder);
+  // const totalpages = Math.ceil( filteredProducts.length/Productperpage);
 
   return (
     <>
-      <ToastContainer position="top-center" autoClose={3000} hideProgressBar />
+     
       <div className="page-header">
         <h1>Product</h1>
       </div>
@@ -224,12 +240,12 @@ const validateForm = () => {
         </div>
       </div>
 
-      <div className="customers-stats">
+      {/* <div className="customers-stats">
         <div className="stat-card">
           <h3>Total Products</h3>
           <div>{products.length}</div>
         </div>
-      </div>
+      </div> */}
 
    
       <table className="product-table">
@@ -287,7 +303,7 @@ const validateForm = () => {
                     >
                       ✏️
                     </button>
-                    <button className="action-btn delete"  tittle="Delete Product"onClick={() => confirmDelete(product.id)}>🗑</button>
+                    <button  title="Delete Product"className="action-btn delete"  tittle="Delete Product"onClick={() => confirmDelete(product.id)}>🗑</button>
                   </div>
                 </td>
               </tr>
@@ -338,6 +354,18 @@ const validateForm = () => {
                     <span className="error-msg">{validationErrors.short_description}</span>
                   )}
                 </div>
+                <div className="form-field">
+                 <label>Category</label>
+            <select  name="category" value={productForm.category} onChange={handleInputChange}>
+              <option value="">Select Category</option>
+              {categoryOption.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+            {validationErrors.category && <span className="error-msg">{validationErrors.category}</span>}
+</div>
               </div>
               <div className="form-column-2">
                 <div className="form-field">
@@ -367,18 +395,10 @@ const validateForm = () => {
                     <img src={previewImage} alt="Current" width="100" />
                   </div>
                 )}
+
               </div>
             </div>
- <label>Category</label>
-            <select name="category" value={productForm.category} onChange={handleInputChange}>
-              <option value="">Select Category</option>
-              {categoryOption.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name}
-                </option>
-              ))}
-            </select>
-            {validationErrors.category && <span className="error-msg">{validationErrors.category}</span>}
+
 
             <div className="form-buttons">
               <button type="submit">{productEditing ? "Edit Product" : "Add Product"}</button>
@@ -416,12 +436,30 @@ const validateForm = () => {
             <h3>Delete Product</h3>
             <p>Are you sure you want to delete this product?</p>
             <div className="form-buttons">
-              <button className="delete-btn" onClick={handleDelete}>Yes</button>
+              <button className="otp-btn verify-btn" onClick={handleDelete}>Yes</button>
               <button className="cancel-btn" onClick={() => setShowDeleteModal(false)}>No</button>
             </div>
           </div>
         </div>
       )}
+      {filteredProducts.length > Productperpage && (
+        <div className="pagination"> 
+      
+        </div>
+      )}
+ <ToastContainer
+        position="top-center"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        closeButton
+      />
+
     </>
   );
 };

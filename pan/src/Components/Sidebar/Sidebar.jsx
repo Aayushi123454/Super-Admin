@@ -3,7 +3,7 @@
 import { Link, useLocation } from "react-router-dom"
 import { SidebarData } from "./Sidebardata"
 import "./Sidebar.css"
-// import logo1 from '../Assests/logo1.png';
+ import logo1 from '../Assests/logo1.png';
 
 
 
@@ -15,15 +15,23 @@ const Sidebar = ({ collapsed }) => {
   return (
     <div className={`sidebar ${collapsed ? "collapsed" : "expanded"}`}>
       <div className="sidebar-header">
-        <div className="logo">
+        <div className="logo1">
           <div>
- {/* <img
+ {/* <imgwidth: 111px;
+    height: 51px;
+    margin-top: 5px;
         src={logo1}
         alt="Sidebar Icon"
         style={{ width: '70px', height: '92px', backgroundColor:'#466425', }}
       /> */}
           </div>
-          {collapsed ? <span className="logo-collapsed">A</span> : <h1 className="logo-expanded">Ayurmuni</h1>}
+          {collapsed ? <span className="logo-collapsed">A</span> : <img
+        src={logo1}
+        alt="Sidebar Icon"
+        className="logo-expanded"
+        style={{ width: '111px', height: '51px', marginTop: '5px' }}
+
+      /> }
         </div>
       </div>
 

@@ -1,6 +1,7 @@
-
-import { useState, useEffect, useRef } from "react"
+import * as XLSX from "xlsx";
+import { useState, useEffect, useRef } from "react";
 import { ToastContainer, toast } from "react-toastify"
+
 import "react-toastify/dist/ReactToastify.css"
 import { useNavigate } from "react-router-dom"
 const userId = localStorage.getItem("USER_ID")
@@ -13,12 +14,14 @@ const intialDoctorform = {
   verified_phone_number: "",
   experience_years: "",
   address_line: "",
-  specialization_ids: "",
-  user: userId,
+  specialization_ids: [],
+  user: "",
+  treatment_type_id: "",
   consultation_fee: "",
   available_from: "",
   available_to: "",
 }
+
 
 const Doctor = () => {
   const [doctorsearch, setDoctorsearch] = useState("")
@@ -46,7 +49,21 @@ const Doctor = () => {
   const [Isuser, setISUser] = useState(false)
   const [deleteConfirmModal, setDeleteConfirmModal] = useState(false)
   const [selectedVendorId, setSelectedVendorId] = useState(null)
- const navigate=useNavigate();
+  const [AddSpeciality, setAddspecialityform] = useState(false);
+  const [newSpecilization, setNewSpecilization] = useState("")
+  const [treatmentTypes, setTreatmentTypes] = useState([]);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+
+
+  //Userid
+  const [userId, setUserId] = useState("");
+
+
+
+  const doctortableRef = useRef(null);
+  const fetchedOnce = useRef(false);
+
+  const navigate = useNavigate();
   const validatePhoneNumber = (phone) => {
     const errors = {}
 
@@ -78,18 +95,18 @@ const Doctor = () => {
   const validateDoctorForm = (formData, phoneNum) => {
     const errors = {}
 
-  
+
     if (!formData.name.trim()) {
       errors.name = "Doctor name is required"
     } else if (formData.name.trim().length < 2) {
       errors.name = "Doctor name must be at least 2 characters"
-    } else if (!/^[a-zA-Z\s]+$/.test(formData.name.trim())) {
-      errors.name = "Doctor name should only contain letters and spaces"
+    } else if (!/^[a-zA-Z\s.]+$/.test(formData.name.trim())) {
+      errors.name = "Doctor name should only contain letters, spaces, and dots"
     } else if (formData.name.trim().length > 50) {
       errors.name = "Doctor name should not exceed 50 characters"
     }
 
-   
+
     if (!formData.email.trim()) {
       errors.email = "Email is required"
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
@@ -104,7 +121,7 @@ const Doctor = () => {
       errors.address_line = "Address should not exceed 200 characters"
     }
 
-   
+
     if (!formData.consultation_fee) {
       errors.consultation_fee = "Consultation fee is required"
     } else if (isNaN(formData.consultation_fee)) {
@@ -115,7 +132,7 @@ const Doctor = () => {
       errors.consultation_fee = "Consultation fee should not exceed ₹10,000"
     }
 
-  
+
     if (!formData.experience_years) {
       errors.experience_years = "Experience is required"
     } else if (isNaN(formData.experience_years)) {
@@ -126,12 +143,12 @@ const Doctor = () => {
       errors.experience_years = "Experience should not exceed 60 years"
     }
 
-  
+
     if (!formData.specialization_ids) {
       errors.specialization_ids = "Please select a specialization"
     }
 
- 
+
     if (!formData.available_from) {
       errors.available_from = "Available from time is required"
     }
@@ -140,13 +157,20 @@ const Doctor = () => {
       errors.available_to = "Available to time is required"
     }
 
+
+    //     if (!formData.treatment_type) {
+    //   errors.treatment_type= "Please select a treatment type";
+    // }
+
+
+
     if (formData.available_from && formData.available_to) {
       if (formData.available_from >= formData.available_to) {
         errors.available_to = "Available to time must be after available from time"
       }
     }
 
-   
+
     if (!EditingDoctorId && phoneNum) {
       const phoneValidation = validatePhoneNumber(phoneNum)
       if (phoneValidation.phone) {
@@ -164,9 +188,13 @@ const Doctor = () => {
   }
 
 
-const handleNavigate = (id) => {
+  const handleNavigate = (id) => {
     console.log(id)
     navigate(`/Patient/${id}`)
+  }
+  const handleNavigateDoctor = (id) => {
+    console.log(id)
+    navigate(`/DoctorDetail/${id}`)
   }
 
 
@@ -191,14 +219,18 @@ const handleNavigate = (id) => {
     } catch (err) {
       console.error(err.message)
       setError("Something went wrong while fetching data.")
+      toast.error("Failed to fetch Doctor Data")
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    getdoctorlist()
-  }, [])
+    if (!fetchedOnce.current) {
+      getdoctorlist();
+      fetchedOnce.current = true;
+    }
+  }, []);
 
   const filteredDoctors = Doctordata.filter((doctor) => {
     const matchesSearch =
@@ -213,8 +245,15 @@ const handleNavigate = (id) => {
     const matchesSpecialization =
       specializationfilter === "All" || doctor.specializations?.some((s) => s.name === specializationfilter)
 
+
     return matchesSearch && matchesStatus && matchesSpecialization
   })
+    .sort((a, b) => {
+      if (!a.name) return 1;
+      if (!b.name) return -1;
+      return a.name.localeCompare(b.name);
+    });
+
 
   const handleOtpDigitChange = (e, index) => {
     const value = e.target.value.replace(/\D/g, "")
@@ -258,7 +297,11 @@ const handleNavigate = (id) => {
   }
 
   const handleDoctorformSubmit = async (e) => {
+
+
     e.preventDefault()
+
+    console.log("doctformvalueee", Doctorform.specialization_ids);
 
     const formErrors = validateDoctorForm(Doctorform, phonenumber)
 
@@ -275,6 +318,7 @@ const handleNavigate = (id) => {
 
     console.log(method, url, spec, "spec")
 
+    let user;
     const bodyData = {
       name: Doctorform.name.trim(),
       email: Doctorform.email.trim(),
@@ -283,16 +327,23 @@ const handleNavigate = (id) => {
       verified_phone_number: `+91${phonenumber}`,
       experience_years: Number.parseInt(Doctorform.experience_years),
       consultation_fee: Number.parseFloat(Doctorform.consultation_fee),
-      specialization_ids: [Doctorform.specialization_ids],
+      specialization_ids:
+        Array.isArray(Doctorform.specialization_ids)
+          ? Doctorform.specialization_ids
+          : [Doctorform.specialization_ids],
       available_from: Doctorform.available_from,
       available_to: Doctorform.available_to,
+      treatment_type_ids: Doctorform.treatment_type_id,
+    }
+    if (!EditingDoctorId) {
+      user = userId || localStorage.getItem("USER_ID")
+      bodyData.user = user;
+
     }
 
-    if (!EditingDoctorId) {
-      bodyData.user = userId
-    }
 
     console.log("doctorbodyda----->", bodyData)
+
 
     try {
       const response = await fetch(url, {
@@ -304,10 +355,7 @@ const handleNavigate = (id) => {
         body: JSON.stringify(bodyData),
       })
 
-      const result = await response.json()
-
-      console.log("jjjjjjj", response)
-      console.log("jjjjjjj", result)
+      const result = await response.json();
 
       if (response.ok) {
         toast.success(EditingDoctorId ? "Doctor updated successfully" : "Doctor added successfully")
@@ -323,6 +371,91 @@ const handleNavigate = (id) => {
       toast.error("Error saving doctor")
     }
   }
+  //  const [isSubmitting, setIsSubmitting] = useState(false);
+
+
+  const handleAddSpecialization = async (e) => {
+    // if (isSubmitting) return; 
+    //   setIsSubmitting(true);
+
+    e.preventDefault();
+    if (!newSpecilization.trim()) {
+      toast.error("Specialization name is required");
+      // setIsSubmitting(false);
+
+      return;
+    }
+
+    if (!/^[A-Za-z\s]+$/.test(newSpecilization)) {
+      toast.error("Specialization must contain only alphabets");
+
+
+      return;
+
+    }
+
+
+
+    try {
+      const response = await fetch("https://q8f99wg9-8000.inc1.devtunnels.ms/ecom/speciality/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: newSpecilization,
+        }),
+      });
+
+      const data = await response.json();
+      console.log("Specialization Response:", data);
+
+      if (!response.ok) {
+        toast.error(data.message || "Specialization already exists");
+        // setIsSubmitting(false);
+
+        return;
+      }
+
+      toast.success("Specialization added successfully!");
+
+
+      setNewSpecilization("");
+
+
+      fetchSpecilization();
+
+      setAddspecialityform(false);
+
+    } catch (error) {
+      console.error("Error adding specialization:", error);
+      toast.error("Error adding specialization.");
+    }
+  };
+
+
+  const fetchTreatmentTypes = async () => {
+    try {
+      const response = await fetch("https://q8f99wg9-8000.inc1.devtunnels.ms/ecom/treatmenttypes/", {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+      });
+      const data = await response.json();
+      setTreatmentTypes(data);
+    } catch (error) {
+      console.error("Error fetching treatment types:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchTreatmentTypes();
+  }, []);
+
+
+
 
   const handledoctorSubmit = async (e) => {
     e.preventDefault()
@@ -363,6 +496,7 @@ const handleNavigate = (id) => {
     }
   }
 
+
   const handleDoctorinputchange = (e) => {
     const { name, value, type, checked } = e.target
 
@@ -383,116 +517,242 @@ const handleNavigate = (id) => {
     }
   }
 
+  // const handleVerifiedDoctorSubmit = async (e) => {
+  //   e.preventDefault()
+  //   const otp = otpDigits.join("")
+
+  //   const otpValidation = validateOTP(otp)
+
+  //   if (Object.keys(otpValidation).length > 0) {
+  //     setOtpErrors(otpValidation)
+  //     return
+  //   }
+
+  //   try {
+  //     let response
+  //     const payload = {
+  //       phone_number: `+91${phonenumber}`,
+  //       otp,
+  //     }
+
+  //     if (Isuser) {
+  //       response = await fetch("https://q8f99wg9-8000.inc1.devtunnels.ms/user/register/", {
+  //         method: "POST",
+  //         headers: {
+  //           Accept: "application/json",
+  //           "Content-Type": "application/json",
+  //         },
+  //         body: JSON.stringify(payload),
+  //       })
+  //       // } else {
+  //       //   response = await fetch("https://q8f99wg9-8000.inc1.devtunnels.ms/user/doctorlogin/", {
+  //       //     method: "POST",
+  //       //     headers: {
+  //       //       Accept: "application/json",
+  //       //       "Content-Type": "application/json",
+  //       //     },
+  //       //     body: JSON.stringify(payload),
+  //       //   })
+  //       // }
+
+  //       const data = await response.json()
+  //       console.log("serverreposne1111", response)
+  //       console.log("dataaresposne", data)
+
+  //       if (response.ok) {
+  //         localStorage.setItem("USER_ID", data.user_id)
+  //         if (data.is_doctor === false) {
+  //           setVerifiedDoctorModal(false)
+  //           setDoctorformModal(true)
+  //           setOtpErrors({})
+  //           toast.success("Phone verified successfully")
+
+  //         } else {
+  //           toast.info("Doctor is already created with this number")
+  //           setVerifiedDoctorModal(false)
+  //           clearAllErrors()
+  //           setPhonenumber("")
+  //           setOtpDigits(["", "", "", ""])
+
+  //         }
+  //       } else {
+  //         toast.error(data.message || "Invalid or expired OTP")
+  //       }
+  //     } catch (err) {
+  //       console.error("Error during doctor verification:", err.message)
+  //       toast.error(`Verification failed: ${err.message}`)
+  //     }
+  //   }
+
+
+
   const handleVerifiedDoctorSubmit = async (e) => {
-    e.preventDefault()
-    const otp = otpDigits.join("")
+    e.preventDefault();
+    const otp = otpDigits.join("");
 
-    const otpValidation = validateOTP(otp)
-
+    const otpValidation = validateOTP(otp);
     if (Object.keys(otpValidation).length > 0) {
-      setOtpErrors(otpValidation)
-      return
+      setOtpErrors(otpValidation);
+      return;
     }
 
     try {
-      let response
       const payload = {
         phone_number: `+91${phonenumber}`,
         otp,
-      }
+      };
 
-      if (Isuser) {
-        response = await fetch("https://q8f99wg9-8000.inc1.devtunnels.ms/user/register/", {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        })
-      } else {
-        response = await fetch("https://q8f99wg9-8000.inc1.devtunnels.ms/user/doctorlogin/", {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        })
-      }
+      const response = await fetch("https://q8f99wg9-8000.inc1.devtunnels.ms/user/register/", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
 
-      const data = await response.json()
-      console.log("serverreposne1111", response)
-      console.log("dataaresposne", data)
+      const data = await response.json();
+      console.log("server response", response);
+      console.log("data response", data);
+      setUserId(data.user_id);
+
 
       if (response.ok) {
-        localStorage.setItem("USER_ID", data.user_id)
-        if (!data.is_new_doctor) {
-          toast.info("Doctor is already created with this number")
-          setVerifiedDoctorModal(false)
-          clearAllErrors()
-          setPhonenumber("")
-          setOtpDigits(["", "", "", ""])
+
+        localStorage.setItem("USER_ID", data.user_id);
+
+        if (data.is_doctor === false) {
+
+          setVerifiedDoctorModal(false);
+          setDoctorformModal(true);
+          setOtpErrors({});
+          toast.success("Phone verified successfully");
         } else {
-          setVerifiedDoctorModal(false)
-          setDoctorformModal(true)
-          setOtpErrors({})
-          toast.success("Phone verified successfully")
+
+          setVerifiedDoctorModal(false);
+          clearAllErrors();
+          setPhonenumber("");
+          setOtpDigits(["", "", "", ""]);
         }
       } else {
-        toast.error(data.message || "Invalid or expired OTP")
+        toast.error(data.message || "Invalid or expired OTP");
       }
     } catch (err) {
-      console.error("Error during doctor verification:", err.message)
-      toast.error(`Verification failed: ${err.message}`)
+      console.error("Error during doctor verification:", err.message);
+      toast.error(`Verification failed: ${err.message}`);
+    }
+  };
+
+
+  const handleDoctorLoginSubmit = async (e) => {
+    e.preventDefault();
+    const otp = otpDigits.join("");
+
+    const otpValidation = validateOTP(otp);
+    if (Object.keys(otpValidation).length > 0) {
+      setOtpErrors(otpValidation);
+      return;
+    }
+
+    try {
+      const payload = {
+        phone_number: `+91${phonenumber}`,
+        otp,
+      };
+
+      const response = await fetch("https://q8f99wg9-8000.inc1.devtunnels.ms/user/doctorlogin/", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+      console.log("server response", response);
+      console.log("data response", data);
+
+      if (response.ok) {
+
+        localStorage.setItem("USER_ID", data.user_id);
+
+        if (data.is_new_doctor === false) {
+          toast.info(" Doctor Already created");
+          setVerifiedDoctorModal(false);
+          clearAllErrors();
+          setPhonenumber("");
+          setOtpDigits(["", "", "", ""]);
+        } else {
+
+          toast.success("Doctor login Sucessfully");
+          setVerifiedDoctorModal(false);
+          setDoctorformModal(true);
+        }
+      } else {
+        toast.error(data.message || "Invalid or expired OTP");
+      }
+    } catch (err) {
+      console.error("Error during doctor login:", err.message);
+      toast.error(`Login failed: ${err.message}`);
+    }
+  };
+
+  const handleDoctorDownload = () => {
+    const exportData = Doctordata.map((d, index) => ({
+      ID: index + 1,
+      Name: d.name,
+      Email: d.email,
+      "Phone Number": d.verified_phone_number,
+      "Consultation Fee (₹)": d.consultation_fee,
+      Specialization: d.specializations?.map((s) => s.name).join(", "),
+      "Experience (Years)": d.experience_years,
+      Status: d.assured_muni ? "Verified" : "Unverified",
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData)
+    const colWidths = Object.keys(exportData[0] || {}).map((key) => ({ wch: key.length + 20 }));
+    ws['!cols'] = colWidths;
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Doctors");
+
+    XLSX.writeFile(wb, "doctor_data.xlsx");
+  };
+
+
+  const handleResendOtp = async () => {
+    try {
+      const phoneValidation = validatePhoneNumber(phonenumber)
+
+      if (Object.keys(phoneValidation).length > 0) {
+        setPhoneErrors(phoneValidation)
+        return
+      }
+
+      const response = await fetch("https://q8f99wg9-8000.inc1.devtunnels.ms/user/send-otp/", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ phone_number: `+91${phonenumber}` }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setOtpDigits(["", "", "", ""])
+        toast.success("OTP resent successfully")
+      } else {
+        toast.error(data.message || "Failed to resend OTP")
+      }
+    } catch (err) {
+      console.error("Resend OTP error:", err)
+      toast.error("Failed to resend OTP")
     }
   }
 
-  const exportDoctorsToCSV = () => {
-    if (Doctordata.length === 0) return
-
-    const headers = [
-      "ID",
-      "Name",
-      "Email",
-      "Phone",
-      "Address",
-      "Verified",
-      "Consultation Fee",
-      "Available from",
-      "Available to",
-      "Specializations",
-      "Experience",
-    ]
-
-    const rows = Doctordata.map((doctor) => [
-      doctor.id,
-      doctor.name,
-      doctor.email,
-      `'${doctor.verified_phone_number}'`,
-      doctor.address_line,
-      doctor.assured_muni ? "Yes" : "No",
-      doctor.consultation_fee,
-      doctor.available_from,
-      doctor.available_to,
-      doctor.specializations?.map((s) => s.name).join(", "),
-      doctor.experience_years,
-    ])
-
-    const csvContent = [
-      headers.join(","),
-      ...rows.map((row) => row.map((field) => `"${String(field).replace(/"/g, '""')}"`).join(",")),
-    ].join("\n")
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.href = url
-    link.setAttribute("download", "doctor_data.csv")
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
 
   const handleverifiedDoctor = () => {
     setVerifiedDoctorModal(false)
@@ -519,6 +779,54 @@ const handleNavigate = (id) => {
   useEffect(() => {
     fetchSpecilization()
   }, [])
+
+
+  const handleStatusChange = async (doctorId, newStatus) => {
+    const updatedStatus = newStatus === "verified";
+
+    try {
+      const response = await fetch(
+        `https://q8f99wg9-8000.inc1.devtunnels.ms/ecom/doctor/${doctorId}/`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({ assured_muni: updatedStatus }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (response.ok) {
+
+        setDoctorData((prev) =>
+          prev.map((doc) =>
+            doc.id === doctorId ? { ...doc, assured_muni: updatedStatus } : doc
+          )
+        );
+        toast.success(`Doctor status updated to ${newStatus}!`);
+      } else {
+        toast.error(data.message || "Failed to update status");
+      }
+    } catch (error) {
+      console.error("Error updating doctor status:", error);
+      toast.error("Failed to update status");
+    }
+  };
+
+  console.log("filtereddddd", filteredDoctors)
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest(".multi-select-dropdown")) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
 
   return (
     <>
@@ -560,9 +868,10 @@ const handleNavigate = (id) => {
           <button className="add-customer-btn" onClick={() => setDoctorModal(true)}>
             + Add Doctor
           </button>
-          <button className="add-customer-btn" onClick={exportDoctorsToCSV}>
-            Export Details
+          <button className="add-customer-btn" onClick={handleDoctorDownload}>
+            Export Detils
           </button>
+
         </div>
       </div>
 
@@ -580,103 +889,138 @@ const handleNavigate = (id) => {
           <div className="stat-value">{Doctordata.filter((d) => !d.assured_muni).length}</div>
         </div>
       </div>
+      <div className="table-container">
+        <table className="customers-table" ref={doctortableRef}>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Phone</th>
+              <th>Address</th>
+              <th>Actions</th>
+              <th>Status</th>
 
-      <table className="customers-table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Name</th>
-            <th>Email</th>
-            <th>Phone</th>
-            <th>Address</th>
-            <th>Status</th>
-            <th>Consultation Fee</th>
-            <th>Availability</th>
-            <th>Specialization</th>
-            <th>Experience</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {Loading ? (
-            <tr>
-              <td colSpan="11">Loading Doctor data...</td>
+              <th> Fees </th>
+              <th>Availability</th>
+              <th>Specialization</th>
+              <th>Type</th>
+              <th>Experience</th>
+
             </tr>
-          ) : error ? (
-            <tr>
-              <td colSpan="11" style={{ color: "red" }}>
-                {error}
-              </td>
-            </tr>
-          ) : filteredDoctors.length > 0 ? (
-            filteredDoctors.map((item, index) => (
-              <tr key={item.id}>
-                <td>{index + 1}</td>
-                <td>{item.name}</td>
-                <td>{item.email}</td>
-                <td>{item.verified_phone_number}</td>
-                <td>{item.address_line}</td>
-                <td>{item.assured_muni ? "Verified Doctor" : "Unverified Doctor"}</td>
-                <td>₹{item.consultation_fee}</td>
-                <td style={{ color: "blue" }}>
-                  {item.available_from} - {item.available_to}
-                </td>
-                <td>{item.specializations?.map((s) => s.name).join(", ")}</td>
-                <td>{item.experience_years} years</td>
-                <td>
-                  <div className="action-buttons">
-                    <button className="action-btn view" onClick={() => handleNavigate(item.id)}>
-                      👁
-                    </button>
-                    <button
-                      className="action-btn edit"
-                      onClick={() => {
-                        setDoctorform({
-                          name: item.name,
-                          email: item.email,
-                          address_line: item.address_line,
-                          assured_muni: item.assured_muni,
-                          verified_phone_number: item.verified_phone_number,
-                          experience_years: item.experience_years,
-                          specialization_ids: item.specializations?.[0]?.id || "",
-                          consultation_fee: item.consultation_fee,
-                          available_from: item.available_from || "",
-                          available_to: item.available_to || "",
-                        })
-                        setSpecs([item.specializations?.[0]?.id])
-                        setPhonenumber(item.verified_phone_number?.replace("+91", ""))
-                        setEditingDoctorId(item.id)
-                        setDoctorformModal(true)
-                        clearAllErrors()
-                      }}
-                    >
-                      ✏️
-                    </button>
-                    <button
-                      className="action-btn delete"
-                      title="Delete"
-                      onClick={() => {
-                        setSelectedVendorId(item.id)
-                        setDeleteConfirmModal(true)
-                      }}
-                    >
-                      🗑
-                    </button>
-                  </div>
+          </thead>
+          <tbody>
+            {Loading ? (
+              <tr>
+                <td colSpan="11">Loading Doctor data...</td>
+              </tr>
+            ) : error ? (
+              <tr>
+                <td colSpan="11" style={{ color: "red" }}>
+                  {error}
                 </td>
               </tr>
-            ))
-          ) : (
-            <tr>
-              <td colSpan="11" style={{ textAlign: "center" }}>
-                No data found
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+            ) : filteredDoctors.length > 0 ? (
+              filteredDoctors.map((item, index) => (
+                <tr key={item.id}>
+                  <td>{index + 1}</td>
+                  <td>{item.name}</td>
+                  <td>{item.email}</td>
+                  <td>{item.verified_phone_number}</td>
+                  <td>{item.address_line}</td>
+                  <td>
+                    <div className="action-buttons">
+                      <button
+                        title="patient list"
+                        className="action-btn view" onClick={() => handleNavigate(item.id)}>
+                        👁
+                      </button>
+                      <button
+                        className="action-btn edit"
+                        title="Edit Doctor Details"
+                        onClick={() => {
+                          setDoctorform({
+                            name: item.name,
+                            email: item.email,
+                            address_line: item.address_line,
+                            assured_muni: item.assured_muni,
+                            verified_phone_number: item.verified_phone_number,
+                            experience_years: item.experience_years,
+                            // specialization_ids: item.specializations?.[0]?.id || "",
+                           specialization_ids: item.specializations ? 
+    item.specializations.map(spec => String(spec.id)) : [],
+                            consultation_fee: item.consultation_fee,
+                            available_from: item.available_from || "",
+                            available_to: item.available_to || "",
+                            treatment_type_id: item.treatment_type?.[0]?.id || "",
+                          })
+                          // setSpecs([item.specializations?.[0]?.id])
+                setSpecs(item.specializations ? item.specializations.map(spec => spec.id) : [])
+                          setPhonenumber(item.verified_phone_number?.replace("+91", ""))
+                          setEditingDoctorId(item.id)
 
-     
+                          setDoctorformModal(true)
+                          clearAllErrors()
+                        }}
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        className="action-btn delete"
+                        title="Delete"
+                        onClick={() => {
+                          setSelectedVendorId(item.id)
+                          setDeleteConfirmModal(true)
+                        }}
+                      >
+                        🗑
+                      </button>
+                      <button
+                        className="action-btn"
+                        title="Doctor Detail Page"
+                        onClick={() => handleNavigateDoctor(item.id)}
+                      >
+                        📄
+                      </button>
+
+
+                    </div>
+                  </td>
+
+                  <td>
+                    <select
+                      value={item.assured_muni ? "verified" : "unverified"}
+                      onChange={(e) => handleStatusChange(item.id, e.target.value)}
+                      className="status-dropdown"
+                    >
+                      <option value="verified">Verified</option>
+                      <option value="unverified">Unverified</option>
+                    </select>
+                  </td>
+
+                  <td>₹{item.consultation_fee}</td>
+                  <td style={{ color: "blue" }}>
+                    {item.available_from} - {item.available_to}
+                  </td>
+                  <td>{item.specializations?.map((s) => s.name).join(", ")}</td>
+
+                  <td>{item.treatment_type.map((item) => item.treatment_type)}</td>
+                  <td>{item.experience_years} years</td>
+
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="11" style={{ textAlign: "center" }}>
+                  No data found
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+
       {DoctorModal && (
         <div className="modal">
           <form className="customer-form" onSubmit={handledoctorSubmit}>
@@ -698,7 +1042,7 @@ const handleNavigate = (id) => {
               style={{ borderColor: phoneErrors.phone ? "red" : "" }}
             />
             {phoneErrors.phone && (
-              <span style={{ color: "red", fontSize: "12px", display: "block", marginTop: "5px" }}>
+              <span style={{ color: "red", fontSize: "17px", display: "block", marginTop: "5px" }}>
                 {phoneErrors.phone}
               </span>
             )}
@@ -715,7 +1059,8 @@ const handleNavigate = (id) => {
       {verifiedDoctorModal && (
         <div className="otp-modal-overlay">
           <div className="otp-modal">
-            <form onSubmit={handleVerifiedDoctorSubmit} className="otp-form">
+            <form onSubmit={Isuser ? handleVerifiedDoctorSubmit : handleDoctorLoginSubmit} className="otp-form">
+
               <h2 className="otp-title">Enter Your OTP</h2>
 
               <div className="otp-input-group">
@@ -738,13 +1083,16 @@ const handleNavigate = (id) => {
 
               {otpErrors.otp && (
                 <span
-                  style={{ color: "red", fontSize: "12px", display: "block", marginTop: "10px", textAlign: "center" }}
+                  style={{ color: "red", fontSize: "17px", display: "block", marginTop: "-14px", textAlign: "center", marginBottom: "4px", }}
                 >
                   {otpErrors.otp}
                 </span>
               )}
 
               <div className="otp-button-group">
+                <button type="button" onClick={handleResendOtp} className="otp-btn resend-btn">
+                  Resend otp
+                </button>
                 <button type="submit" className="otp-btn verify-btn">
                   Verify
                 </button>
@@ -774,7 +1122,7 @@ const handleNavigate = (id) => {
                     style={{ borderColor: doctorFormErrors.name ? "red" : "" }}
                   />
                   {doctorFormErrors.name && (
-                    <span style={{ color: "red", fontSize: "12px", display: "block", marginTop: "3px" }}>
+                    <span style={{ color: "red", fontSize: "17px", display: "block", marginTop: "3px" }}>
                       {doctorFormErrors.name}
                     </span>
                   )}
@@ -787,11 +1135,11 @@ const handleNavigate = (id) => {
                     type="email"
                     value={Doctorform.email}
                     onChange={handleDoctorinputchange}
-                   
+
                     style={{ borderColor: doctorFormErrors.email ? "red" : "" }}
                   />
                   {doctorFormErrors.email && (
-                    <span style={{ color: "red", fontSize: "12px", display: "block", marginTop: "3px" }}>
+                    <span style={{ color: "red", fontSize: "17px", display: "block", marginTop: "3px" }}>
                       {doctorFormErrors.email}
                     </span>
                   )}
@@ -803,11 +1151,11 @@ const handleNavigate = (id) => {
                     name="address_line"
                     value={Doctorform.address_line}
                     onChange={handleDoctorinputchange}
-                    
+
                     style={{ borderColor: doctorFormErrors.address_line ? "red" : "" }}
                   />
                   {doctorFormErrors.address_line && (
-                    <span style={{ color: "red", fontSize: "12px", display: "block", marginTop: "3px" }}>
+                    <span style={{ color: "red", fontSize: "17px", display: "block", marginTop: "3px" }}>
                       {doctorFormErrors.address_line}
                     </span>
                   )}
@@ -820,25 +1168,24 @@ const handleNavigate = (id) => {
                     name="consultation_fee"
                     value={Doctorform.consultation_fee}
                     onChange={handleDoctorinputchange}
-                 
+
                     min="1"
                     max="10000"
                     style={{ borderColor: doctorFormErrors.consultation_fee ? "red" : "" }}
                   />
                   {doctorFormErrors.consultation_fee && (
-                    <span style={{ color: "red", fontSize: "12px", display: "block", marginTop: "3px" }}>
+                    <span style={{ color: "red", fontSize: "17px", display: "block", marginTop: "3px" }}>
                       {doctorFormErrors.consultation_fee}
                     </span>
                   )}
                 </div>
-
-                <div className="form-field">
+                {/* <div className="form-field">
                   <label>Specialization: *</label>
                   <select
                     name="specialization_ids"
                     value={Doctorform.specialization_ids}
                     onChange={handleDoctorinputchange}
-                
+
                     style={{ borderColor: doctorFormErrors.specialization_ids ? "red" : "" }}
                   >
                     <option value="">-- Select Speciality --</option>
@@ -848,12 +1195,86 @@ const handleNavigate = (id) => {
                       </option>
                     ))}
                   </select>
+                  <button className="btn-secondary" onClick={() => setAddspecialityform(true)}>+Add Speciality</button>
                   {doctorFormErrors.specialization_ids && (
-                    <span style={{ color: "red", fontSize: "12px", display: "block", marginTop: "3px" }}>
+                    <span style={{ color: "red", fontSize: "17px", display: "block", marginTop: "3px" }}>
+                      {doctorFormErrors.specialization_ids}
+                    </span>
+                  )}
+                </div> */}
+
+
+
+                <div className="form-field">
+                  <label>Specialization: *</label>
+
+                  <div className="multi-select-dropdown" style={{ borderColor: doctorFormErrors.specialization_ids ? "red" : "" }}>
+
+                    <div
+                      className="multi-select-label"
+                      onClick={() => setDropdownOpen(!dropdownOpen)}
+                    >
+                      {Doctorform.specialization_ids.length > 0
+                        ? specialities
+                          .filter((s) => Doctorform.specialization_ids.includes(s.id))
+                          .map((s) => s.name)
+                          .join(", ")
+                        : "-- Select Specialities --"}
+                    </div>
+
+
+                    {dropdownOpen && (
+                      <div className="multi-select-options">
+                        {specialities.map((spec) => (
+                          <label key={spec.id} style={{ display: "block", cursor: "pointer" }}>
+                            <input
+                              type="checkbox"
+                              className="checbox1"
+                              checked={Array.isArray(Doctorform.specialization_ids) && Doctorform.specialization_ids.includes(String(spec.id))}
+                              onChange={(e) => {
+
+                                let updated = Array.isArray(Doctorform.specialization_ids)
+                                  ? [...Doctorform.specialization_ids]
+                                  : Doctorform.specialization_ids
+                                    ? [String(Doctorform.specialization_ids)]
+                                    : [];
+
+                                if (e.target.checked) {
+                                  if (!updated.includes(String(spec.id))) {
+                                    updated.push(String(spec.id));
+                                  }
+                                } else {
+                                  updated = updated.filter((id) => id !== String(spec.id));
+                                }
+
+                                setDoctorform({
+                                  ...Doctorform,
+                                  specialization_ids: updated,
+                                });
+
+                                console.log("Updated specialization_ids:", updated);
+                              }}
+                            />
+
+                            {spec.name}
+                          </label>
+                        ))}
+
+                      </div>
+                    )}
+                  </div>
+
+                  <button type="button" className="btn-secondary" onClick={() => setAddspecialityform(true)}>
+                    +Add Speciality
+                  </button>
+
+                  {doctorFormErrors.specialization_ids && (
+                    <span style={{ color: "red", fontSize: "17px", display: "block", marginTop: "3px" }}>
                       {doctorFormErrors.specialization_ids}
                     </span>
                   )}
                 </div>
+
               </div>
 
               <div className="form-column-2">
@@ -864,13 +1285,13 @@ const handleNavigate = (id) => {
                     name="experience_years"
                     value={Doctorform.experience_years}
                     onChange={handleDoctorinputchange}
-                  
+
                     min="0"
                     max="60"
                     style={{ borderColor: doctorFormErrors.experience_years ? "red" : "" }}
                   />
                   {doctorFormErrors.experience_years && (
-                    <span style={{ color: "red", fontSize: "12px", display: "block", marginTop: "3px" }}>
+                    <span style={{ color: "red", fontSize: "17px", display: "block", marginTop: "3px" }}>
                       {doctorFormErrors.experience_years}
                     </span>
                   )}
@@ -883,11 +1304,11 @@ const handleNavigate = (id) => {
                     name="available_from"
                     value={Doctorform.available_from}
                     onChange={handleDoctorinputchange}
-                  
+
                     style={{ borderColor: doctorFormErrors.available_from ? "red" : "" }}
                   />
                   {doctorFormErrors.available_from && (
-                    <span style={{ color: "red", fontSize: "12px", display: "block", marginTop: "3px" }}>
+                    <span style={{ color: "red", fontSize: "17px", display: "block", marginTop: "3px" }}>
                       {doctorFormErrors.available_from}
                     </span>
                   )}
@@ -900,25 +1321,53 @@ const handleNavigate = (id) => {
                     name="available_to"
                     value={Doctorform.available_to}
                     onChange={handleDoctorinputchange}
-                  
+
                     style={{ borderColor: doctorFormErrors.available_to ? "red" : "" }}
                   />
                   {doctorFormErrors.available_to && (
-                    <span style={{ color: "red", fontSize: "12px", display: "block", marginTop: "3px" }}>
+                    <span style={{ color: "red", fontSize: "17px", display: "block", marginTop: "3px" }}>
                       {doctorFormErrors.available_to}
                     </span>
                   )}
                 </div>
 
-                <div className="form-field">
+
+                <div className="form-field1">
+                  <label>Treatment Type: *</label>
+                  <select
+                    name="treatment_type_id"
+                    value={Doctorform.treatment_type_id}
+                    onChange={handleDoctorinputchange}
+                    style={{ borderColor: doctorFormErrors.treatment_type_id ? "red" : "" }}
+                  >
+                    <option value="">-- Select Treatment Type --</option>
+                    {treatmentTypes.map((type) => (
+                      <option key={type.id} value={type.id}>
+                        {type.treatment_type}
+                      </option>
+                    ))}
+                  </select>
+                  {doctorFormErrors.treatment_type && (
+                    <span style={{ color: "red", fontSize: "17px", display: "block", marginTop: "3px" }}>
+                      {doctorFormErrors.treatment_type}
+                    </span>
+                  )}
+                </div>
+
+
+
+                {/* <div className="form-field1">
                   <label>Verified:</label>
                   <input
                     type="checkbox"
                     name="assured_muni"
                     checked={Doctorform.assured_muni}
                     onChange={handleDoctorinputchange}
+                    className="checkboxd"
                   />
-                </div>
+                </div> */}
+
+
 
                 <div className="form-field">
                   <label>Phone Number:</label>
@@ -932,13 +1381,14 @@ const handleNavigate = (id) => {
                     style={{ borderColor: doctorFormErrors.verified_phone_number ? "red" : "" }}
                   />
                   {doctorFormErrors.verified_phone_number && (
-                    <span style={{ color: "red", fontSize: "12px", display: "block", marginTop: "3px" }}>
+                    <span style={{ color: "red", fontSize: "17px", display: "block", marginTop: "3px" }}>
                       {doctorFormErrors.verified_phone_number}
                     </span>
                   )}
                 </div>
               </div>
             </div>
+
 
             <div className="form-buttons">
               <button type="submit">Save</button>
@@ -953,6 +1403,27 @@ const handleNavigate = (id) => {
                 Cancel
               </button>
             </div>
+          </form>
+        </div>
+      )}
+      {AddSpeciality && (
+        <div className="modal">
+          <form className="customer-form" onSubmit={handleAddSpecialization} >
+            <h2>Add New Specilization</h2>
+            <label>Specilization : </label>
+            <input
+              type="text"
+              placeholder="Enter New Specialization"
+              value={newSpecilization}
+              onChange={(e) => setNewSpecilization(e.target.value)}
+
+            />
+
+            <div className='form-buttons'>
+              <button type="submit">Add Specilization</button>
+              <button type="button" onClick={() => setAddspecialityform(false)}>Cancel</button>
+            </div>
+
           </form>
         </div>
       )}
@@ -994,3 +1465,4 @@ const handleNavigate = (id) => {
 }
 
 export default Doctor
+
