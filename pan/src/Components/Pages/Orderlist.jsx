@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import BASE_URL from "../../Base";
 
 
 const Orderlist = () => {
@@ -13,10 +14,13 @@ const Orderlist = () => {
   const [OrderlistData, setOrderlistData] = useState([]);
   const [error, setError] = useState(null);
   const [orderlistloading, setOrderlistloading] = useState(true);
+  const[CustomerData,setCustomerData]=useState([]);
+  const[Customererror,setCustomererror]=useState(null);
+  const[Customerloading,setCustomerloading]=useState(true);
 
   const fetchOrderlist = async () => {
     try {
-      const response = await fetch(`https://q8f99wg9-8000.inc1.devtunnels.ms/ecom/getorderbycustomerid/${customerId}/`, {
+      const response = await fetch(`${BASE_URL}/ecom/getorderbycustomerid/${customerId}/`, {
         method: 'GET',
         headers: {
           Accept: 'application/json',
@@ -42,7 +46,7 @@ const Orderlist = () => {
   const handlecancelorder = async (orderId) => {
     try {
       const response = await fetch(
-        `https://q8f99wg9-8000.inc1.devtunnels.ms/ecom/cancelorder/`,
+       `${BASE_URL}/ecom/cancelorder/`,
         {
           method: "POST",
           headers: {
@@ -82,6 +86,35 @@ const filteredOrders = OrderlistData.filter(order => {
 });
 
 
+const getcustomerdetail = async()=> {
+  try{
+    const response = await fetch(`${BASE_URL}/ecom/customer/${customerId}/`,{
+      method:'GET',
+      headers:{
+         headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        }
+      }
+    })
+    const data= await response.json();
+    setCustomerData(response)
+console.log("ddddd",response)
+
+  }
+  catch(err){
+console.error(err.message);
+      setCustomererror('Something went wrong while fetching data.');
+  }
+  finally{
+setCustomerloading(false);
+  }
+
+}
+useEffect(()=>{
+  getcustomerdetail();
+},[])
+
 
 const showOrders = SearchOrderlistTerm.trim()
   ? filteredOrders
@@ -94,9 +127,7 @@ const showOrders = SearchOrderlistTerm.trim()
     <>
       <div className="page-header">
    <h2> 
-  {OrderlistData.length > 0
-    ? OrderlistData[0]?.customer_name
-    : "No customer order found"}
+ Customer Detail
 </h2>
 
       </div>
@@ -140,6 +171,20 @@ const showOrders = SearchOrderlistTerm.trim()
 {OrderlistData.filter((v)=> v.order_status ==="delivered").length}
           </div>
         </div>
+      </div>
+
+      <div>
+              <div className="doctor-info">
+                {/* <img src="" alt="Customer" className="doctor-photo" /> */}
+                <div className="doctor-details">
+                <h3>{CustomerData?.firstname} {CustomerData?.lastname}</h3>
+                  <p><strong>First Name:</strong> {CustomerData?.firstname}</p>
+
+                  <p><strong>Email:</strong> {CustomerData?.email}</p>
+                  <p><strong>Phone Number:</strong> {CustomerData?.verified_phone_number}</p>
+                  
+                </div>
+              </div>
       </div>
       <table className="customers-table">
         <thead>
@@ -219,6 +264,7 @@ const showOrders = SearchOrderlistTerm.trim()
         position="top-center"
         autoClose={3000}
         hideProgressBar={false}
+
         newestOnTop={false}
         closeOnClick
         rtl={false}
@@ -227,9 +273,6 @@ const showOrders = SearchOrderlistTerm.trim()
         pauseOnHover
         closeButton
       />
-
-
-
     </>
   );
 };
